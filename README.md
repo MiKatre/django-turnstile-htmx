@@ -20,7 +20,7 @@ A Django app for integrating Cloudflare Turnstile CAPTCHA protection with suppor
    ```python
    INSTALLED_APPS = [
        # ...
-       'turnstile_htmx.apps.TurnstileHtmxConfig',
+       'turnstile_htmx',
        # ...
    ]
    ```
