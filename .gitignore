@@ -1,0 +1,4 @@
+*.DS_Store
+*.pyc
+__pycache__/
+django_turnstile_htmx.egg-info/
