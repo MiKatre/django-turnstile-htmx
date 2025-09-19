@@ -1,0 +1,65 @@
+# This workflow will build and publish your Python package to PyPI when you create a GitHub Release.
+# It uses PyPI's Trusted Publishing feature to avoid storing API tokens as secrets.
+
+name: Publish Python Package to PyPI
+
+on:
+  # This workflow runs when a new GitHub Release is created.
+  release:
+    types: [published]
+
+permissions:
+  contents: read
+
+jobs:
+  # This job builds the package into the standard sdist and wheel formats.
+  build:
+    name: Build distribution
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out the repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11" # You can specify a version
+
+      - name: Install build dependencies
+        run: python -m pip install build
+
+      - name: Build the package
+        run: python -m build
+
+      - name: Store the distribution files
+        uses: actions/upload-artifact@v4
+        with:
+          name: python-package-distributions
+          path: dist/
+
+  # This job publishes the package to PyPI.
+  publish-to-pypi:
+    name: Publish package to PyPI
+    needs: build
+    runs-on: ubuntu-latest
+
+    # This permission is required for PyPI Trusted Publishing
+    permissions:
+      id-token: write
+
+    # This specifies the environment where the deployment will run.
+    # It links to the environment you will configure in your GitHub repository settings.
+    environment:
+      name: pypi
+      # CUSTOMIZED: The URL points to your project on PyPI.
+      url: https://pypi.org/p/django-turnstile-htmx
+
+    steps:
+      - name: Download the distribution files
+        uses: actions/download-artifact@v4
+        with:
+          name: python-package-distributions
+          path: dist/
+
+      - name: Publish package to PyPI
+        uses: pypa/gh-action-pypi-publish@release/v1
