@@ -1,96 +1,62 @@
 # Django Turnstile HTMX
 
-A Django app for integrating Cloudflare Turnstile CAPTCHA protection with support for HTMX.
+A Django app for integrating Cloudflare Turnstile CAPTCHA protection with built-in support for HTMX.
 
 ## Features
 
-- Easy integration with Django views and templates
-- Support for both regular forms and HTMX requests
-- Server-side validation via decorator
-- Simple template tag for adding Turnstile to forms
+-   Simple integration with Django views via a decorator.
+-   Transparently supports both standard form submissions and HTMX requests.
+-   A single template tag (`{% turnstile_field %}`) handles all frontend logic.
+-   Works with Function-Based Views (FBVs) and Class-Based Views (CBVs).
 
 ## Installation
 
-1. Install the package from PyPI:
-   ```bash
-   pip install django-turnstile-htmx
-   ```
+1.  **Install the package from PyPI:**
+    ```bash
+    pip install django-turnstile-htmx
+    ```
 
-2. Add the app to `INSTALLED_APPS` in your `settings.py`:
-   ```python
-   INSTALLED_APPS = [
-       # ...
-       'turnstile_htmx',
-       # ...
-   ]
-   ```
-3. Configure Cloudflare Turnstile keys:
-   ```python
-   CLOUDFLARE_TURNSTILE_SITE_KEY = 'your-site-key-here'
-   CLOUDFLARE_TURNSTILE_SECRET_KEY = 'your-secret-key-here'
-   ```
+2.  **Add the app to `INSTALLED_APPS` in your `settings.py`:**
+    ```python
+    INSTALLED_APPS = [
+        # ...
+        'turnstile_htmx',
+        # ...
+    ]
+    ```
+3.  **Configure your Cloudflare Turnstile keys in `settings.py`:**
+    ```python
+    CLOUDFLARE_TURNSTILE_SITE_KEY = 'your-site-key-here'
+    CLOUDFLARE_TURNSTILE_SECRET_KEY = 'your-secret-key-here'
+    ```
 
 ## Usage
 
-1. Add script to base template:
-   ```html
-   {% load turnstile_tags %}
-   <head>
-     {% turnstile_script %}
-   </head>
-   ```
+First, add the Turnstile script to your base template. This only needs to be done once.
 
-2. Add Turnstile field to forms:
-   ```html
-   {% load turnstile_tags %}
-
-   <!-- Regular form -->
-   <form method="post">
-     {% csrf_token %}
-     {{ form.as_p }}
-     {% turnstile_field %}
-     <button type="submit">Submit</button>
-   </form>
-
-   <!-- HTMX form -->
-   <form hx-post="{% url 'your-view' %}" hx-target="#result">
-     {% csrf_token %}
-     <input type="email" name="email" required>
-     {% turnstile_field %}
-     <button type="submit">Subscribe</button>
-   </form>
-   ```
-
-3. Protect views with decorator:
-   ```python
-   from turnstile_htmx.decorators import turnstile_protected
-
-   @turnstile_protected
-   def contact_form_view(request):
-       # Process form - validation already happened!
-       return render(request, 'contact.html')
-   ```
-
-## API Reference
-
-### Template Tags
-
-- `{% turnstile_field %}` - Renders the Turnstile widget
-  - Parameters: `container_id` (optional), `site_key` (optional)
-
-- `{% turnstile_script %}` - Renders the Turnstile script tag
-
-### Decorators
-
-- `@turnstile_protected` - Validates Turnstile token on POST requests
-  - Parameters: `error_template` (optional)
-
-## Examples
-
-### Contact Form
-
+**`base.html`**
 ```html
-<!-- Template -->
+{% load turnstile_tags %}
+<!DOCTYPE html>
+<html>
+<head>
+    ...
+    {% turnstile_script %}
+    {# It's recommended to load htmx.org before the turnstile script if you use both #}
+    <script src="https://unpkg.com/htmx.org@1.9.10"></script>
+</head>
+<body>
+    ...
+</body>
+</html>
+```
+
+### Protecting a Standard Django Form
+
+Use the `{% turnstile_field %}` tag inside your form and the `@turnstile_protected` decorator on your view.
+
+**`contact.html`**
+```html
 {% extends 'base.html' %}
 {% load turnstile_tags %}
 
@@ -104,13 +70,16 @@ A Django app for integrating Cloudflare Turnstile CAPTCHA protection with suppor
 {% endblock %}
 ```
 
+**`views.py`**
 ```python
-# View
+from django.shortcuts import render, redirect
 from turnstile_htmx.decorators import turnstile_protected
+# from .forms import ContactForm
 
 @turnstile_protected
 def contact_view(request):
     if request.method == 'POST':
+        # The view code is only executed if Turnstile validation passes.
         form = ContactForm(request.POST)
         if form.is_valid():
             form.save()
@@ -120,23 +89,94 @@ def contact_view(request):
     return render(request, 'contact.html', {'form': form})
 ```
 
-### Customization
+### Protecting an HTMX Form
 
-```python
-# Custom error template
-@turnstile_protected(error_template='<div class="alert">Verification failed!</div>')
-def my_view(request):
-    # ...
+The setup is nearly identical. The `turnstile_field` template tag automatically detects and handles HTMX form submissions.
 
-# Custom container ID
-{% turnstile_field container_id="my-turnstile" %}
+**`subscribe.html`**
+```html
+{% load turnstile_tags %}
+
+<form hx-post="{% url 'subscribe' %}" hx-target="#result">
+    {% csrf_token %}
+    <label for="email">Email:</label>
+    <input type="email" name="email" id="email" required>
+    {% turnstile_field %}
+    <button type="submit">Subscribe</button>
+</form>
+
+<div id="result"></div>
 ```
+
+**`views.py`**
+```python
+from django.http import HttpResponse
+from turnstile_htmx.decorators import turnstile_protected
+
+@turnstile_protected
+def subscribe_view(request):
+    # This view is only reached if validation succeeds.
+    # The decorator handles returning a 400 Bad Request with an error
+    # fragment if validation fails on an HTMX request.
+    email = request.POST.get('email')
+    # ... process subscription ...
+    return HttpResponse(f"<p>Thank you for subscribing, {email}!</p>")
+```
+
+### Using with Class-Based Views (CBVs)
+
+To protect a Class-Based View, especially when extending a view from a third-party package like `django-allauth`, apply the `turnstile_protected` decorator in your `urls.py`.
+
+**`views.py`**
+```python
+from allauth.account.views import SignupView
+
+class CustomSignupView(SignupView):
+    """
+    Custom signup view with Turnstile CAPTCHA protection.
+    No extra logic is needed here; the decorator handles validation.
+    """
+    pass
+```
+
+**`urls.py`**
+```python
+from django.urls import path
+from turnstile_htmx.decorators import turnstile_protected
+from .views import CustomSignupView
+
+urlpatterns = [
+    # The decorator wraps the view function generated by .as_view()
+    path('accounts/signup/', turnstile_protected(CustomSignupView.as_view()), name='account_signup'),
+    # ... other urls
+]
+```
+
+## API Reference
+
+### Template Tags
+
+-   `{% turnstile_script %}`
+    -   Renders the Cloudflare Turnstile `<script>` tag. Should be placed in your `<head>`.
+
+-   `{% turnstile_field %}`
+    -   Renders the Turnstile widget container and the necessary JavaScript to handle form submissions.
+    -   **Optional Arguments:**
+        -   `container_id`: A custom `id` for the widget's `<div>` container. A unique ID is generated if not provided.
+        -   `site_key`: Override the `CLOUDFLARE_TURNSTILE_SITE_KEY` from settings.
+
+### Decorators
+
+-   `@turnstile_protected`
+    -   A view decorator that validates the Turnstile token on `POST` requests before executing the view. It handles both standard and HTMX requests appropriately.
+    -   **Optional Arguments:**
+        -   `error_template`: A string of raw HTML to be returned as the body of the `HttpResponseBadRequest` if validation fails on an HTMX request.
 
 ## Troubleshooting
 
-- **Widget not appearing**: Check that `{% turnstile_script %}` is included and site key is correct
-- **Validation failing**: Verify secret key and check browser console for errors
-- **HTMX issues**: Ensure HTMX is loaded before Turnstile script
+-   **Widget not appearing**: Ensure `{% turnstile_script %}` is in your base template and that `CLOUDFLARE_TURNSTILE_SITE_KEY` is set correctly in `settings.py`.
+-   **Validation always failing**: Double-check that `CLOUDFLARE_TURNSTILE_SECRET_KEY` is correct. Check your browser's developer console for any script errors.
+-   **HTMX form submits twice or not at all**: Make sure you have loaded the HTMX library script *before* the `{% turnstile_script %}` tag.
 
 ## License
 
