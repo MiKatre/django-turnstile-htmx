@@ -45,3 +45,15 @@ class TurnstileTemplateTagsTests(TestCase):
         rendered = template.render(Context({}))
 
         self.assertIn('data-action="free_preview"', rendered)
+
+    def test_turnstile_field_with_custom_error_messages(self):
+        template = Template(
+            "{% load turnstile_tags %}"
+            "{% turnstile_field unavailable_message='No disponible' "
+            "error_message='Ha fallado' expired_message='Ha caducado' %}"
+        )
+        rendered = template.render(Context({}))
+
+        self.assertIn("No disponible", rendered)
+        self.assertIn("Ha fallado", rendered)
+        self.assertIn("Ha caducado", rendered)

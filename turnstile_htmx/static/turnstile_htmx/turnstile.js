@@ -17,7 +17,8 @@
   }
 
   function errorElement(state) {
-    return state.container.parentElement?.querySelector("[data-turnstile-error]");
+    const sibling = state.container.nextElementSibling;
+    return sibling?.matches("[data-turnstile-error]") ? sibling : null;
   }
 
   function showError(state, message) {

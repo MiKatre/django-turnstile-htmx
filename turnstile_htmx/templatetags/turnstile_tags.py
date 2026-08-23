@@ -10,7 +10,14 @@ register = template.Library()
 
 
 @register.simple_tag
-def turnstile_field(container_id=None, site_key=None, action=None):
+def turnstile_field(
+    container_id=None,
+    site_key=None,
+    action=None,
+    unavailable_message=None,
+    error_message=None,
+    expired_message=None,
+):
     """Render a progressively enhanced Turnstile field for the nearest form."""
     site_key = site_key or getattr(settings, "CLOUDFLARE_TURNSTILE_SITE_KEY", "")
     container_id = container_id or f"turnstile-container-{uuid.uuid4().hex[:8]}"
@@ -25,9 +32,10 @@ def turnstile_field(container_id=None, site_key=None, action=None):
         container_id,
         site_key,
         action or "",
-        _("The security check could not be loaded. Please try again."),
-        _("The security check failed. Please try again."),
-        _("The security check expired. Please try again."),
+        unavailable_message
+        or _("The security check could not be loaded. Please try again."),
+        error_message or _("The security check failed. Please try again."),
+        expired_message or _("The security check expired. Please try again."),
     )
 
 
