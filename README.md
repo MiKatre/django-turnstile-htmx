@@ -19,7 +19,7 @@ A Django app for integrating Cloudflare Turnstile CAPTCHA protection with built-
 
     Or install the immutable GitHub release tag:
     ```bash
-pip install "django-turnstile-htmx @ git+https://github.com/MiKatre/django-turnstile-htmx.git@v0.2.2"
+pip install "django-turnstile-htmx @ git+https://github.com/MiKatre/django-turnstile-htmx.git@v0.2.3"
     ```
 
 2.  **Add the app to `INSTALLED_APPS` in your `settings.py`:**

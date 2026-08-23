@@ -13,7 +13,6 @@ logger = logging.getLogger(__name__)
 SITEVERIFY_URL = "https://challenges.cloudflare.com/turnstile/v0/siteverify"
 DEFAULT_TIMEOUT_SECONDS = 5
 TURNSTILE_ALWAYS_PASS_TEST_SECRET = "1x0000000000000000000000000000000AA"
-TURNSTILE_TEST_ACTION = "test"
 
 
 def get_client_ip(request):
@@ -71,16 +70,19 @@ def check_turnstile_token(request, *, action=None, hostnames=None):
         )
         return False
 
-    action_matches = payload.get("action") == action
-    test_key_matches = (
+    is_official_test_response = (
         secret_key == TURNSTILE_ALWAYS_PASS_TEST_SECRET
-        and payload.get("action") == TURNSTILE_TEST_ACTION
+        and payload.get("metadata", {}).get("result_with_testing_key") is True
     )
-    if action and not (action_matches or test_key_matches):
+    if action and payload.get("action") != action and not is_official_test_response:
         logger.warning("Turnstile token action did not match the protected action")
         return False
 
-    if expected_hostnames and payload.get("hostname") not in expected_hostnames:
+    if (
+        expected_hostnames
+        and payload.get("hostname") not in expected_hostnames
+        and not is_official_test_response
+    ):
         logger.warning("Turnstile token hostname was not allowed")
         return False
 

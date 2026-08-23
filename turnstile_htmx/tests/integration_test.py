@@ -85,7 +85,7 @@ class TurnstileIntegrationTests(SimpleTestCase):
         CLOUDFLARE_TURNSTILE_EXPECTED_HOSTNAMES=("localhost",),
     )
     @patch("turnstile_htmx.decorators.requests.post")
-    def test_official_always_pass_key_accepts_cloudflare_test_action(self, mock_post):
+    def test_official_always_pass_key_accepts_cloudflare_test_response(self, mock_post):
         request = self.factory.post(
             "/submit/",
             {"cf-turnstile-response": "XXXX.DUMMY.TOKEN.XXXX"},
@@ -94,8 +94,8 @@ class TurnstileIntegrationTests(SimpleTestCase):
         response = Mock()
         response.json.return_value = {
             "success": True,
-            "hostname": "localhost",
-            "action": "test",
+            "hostname": "example.com",
+            "metadata": {"result_with_testing_key": True},
         }
         mock_post.return_value = response
 
