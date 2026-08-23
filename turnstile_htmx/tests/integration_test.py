@@ -1,10 +1,12 @@
 # tests/test_integration.py
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
+import requests
 from django.http import HttpResponse
-from django.test import RequestFactory, SimpleTestCase
+from django.test import RequestFactory, SimpleTestCase, override_settings
 
-from turnstile_htmx.decorators import turnstile_protected
+from turnstile_htmx.decorators import (SITEVERIFY_URL, check_turnstile_token,
+                                       turnstile_protected)
 
 
 class TurnstileIntegrationTests(SimpleTestCase):
@@ -17,6 +19,86 @@ class TurnstileIntegrationTests(SimpleTestCase):
             return HttpResponse("Success")
 
         self.test_view = test_view
+
+    @override_settings(
+        CLOUDFLARE_TURNSTILE_SECRET_KEY="test-secret",
+        CLOUDFLARE_TURNSTILE_EXPECTED_HOSTNAMES=("example.com",),
+    )
+    @patch("turnstile_htmx.decorators.requests.post")
+    def test_siteverify_validates_action_hostname_and_timeout(self, mock_post):
+        response = Mock()
+        response.json.return_value = {
+            "success": True,
+            "hostname": "example.com",
+            "action": "free_preview",
+        }
+        mock_post.return_value = response
+        request = self.factory.post(
+            "/test-view/",
+            {"cf-turnstile-response": "valid-token"},
+            REMOTE_ADDR="203.0.113.10",
+        )
+
+        self.assertTrue(check_turnstile_token(request, action="free_preview"))
+        mock_post.assert_called_once_with(
+            SITEVERIFY_URL,
+            data={
+                "secret": "test-secret",
+                "response": "valid-token",
+                "remoteip": "203.0.113.10",
+            },
+            timeout=5,
+        )
+        response.raise_for_status.assert_called_once_with()
+
+    @override_settings(
+        CLOUDFLARE_TURNSTILE_SECRET_KEY="test-secret",
+        CLOUDFLARE_TURNSTILE_EXPECTED_HOSTNAMES=("example.com",),
+    )
+    @patch("turnstile_htmx.decorators.requests.post")
+    def test_siteverify_rejects_wrong_action_or_hostname(self, mock_post):
+        response = Mock()
+        mock_post.return_value = response
+        request = self.factory.post(
+            "/test-view/",
+            {"cf-turnstile-response": "valid-token"},
+        )
+
+        response.json.return_value = {
+            "success": True,
+            "hostname": "example.com",
+            "action": "another_action",
+        }
+        self.assertFalse(check_turnstile_token(request, action="free_preview"))
+
+        response.json.return_value = {
+            "success": True,
+            "hostname": "attacker.example",
+            "action": "free_preview",
+        }
+        self.assertFalse(check_turnstile_token(request, action="free_preview"))
+
+    @override_settings(CLOUDFLARE_TURNSTILE_SECRET_KEY="test-secret")
+    @patch("turnstile_htmx.decorators.requests.post")
+    def test_siteverify_fails_closed_on_cloudflare_error(self, mock_post):
+        mock_post.side_effect = requests.RequestException("network unavailable")
+        request = self.factory.post(
+            "/test-view/",
+            {"cf-turnstile-response": "valid-token"},
+        )
+
+        self.assertFalse(check_turnstile_token(request))
+
+    @override_settings(CLOUDFLARE_TURNSTILE_SECRET_KEY="")
+    @patch("turnstile_htmx.decorators.requests.post")
+    def test_siteverify_fails_closed_without_secret(self, mock_post):
+        request = self.factory.post(
+            "/test-view/",
+            {"cf-turnstile-response": "valid-token"},
+        )
+
+        self.assertFalse(check_turnstile_token(request))
+        mock_post.assert_not_called()
 
     @patch('turnstile_htmx.decorators.check_turnstile_token')
     def test_form_with_turnstile_submission(self, mock_check):
@@ -44,3 +126,38 @@ class TurnstileIntegrationTests(SimpleTestCase):
         response = self.test_view(request)
         self.assertEqual(response.status_code, 200)
         mock_check.assert_called_once()
+
+    @patch("turnstile_htmx.decorators.check_turnstile_token")
+    def test_decorator_passes_expected_action_and_hostname(self, mock_check):
+        mock_check.return_value = True
+
+        @turnstile_protected(action="free_preview", hostnames=("example.com",))
+        def protected_view(request):
+            return HttpResponse("Success")
+
+        request = self.factory.post(
+            "/test-view/",
+            {"cf-turnstile-response": "valid-token"},
+        )
+
+        response = protected_view(request)
+
+        self.assertEqual(response.status_code, 200)
+        mock_check.assert_called_once_with(
+            request,
+            action="free_preview",
+            hostnames=("example.com",),
+        )
+
+    @patch("turnstile_htmx.decorators.check_turnstile_token", return_value=False)
+    def test_htmx_failure_returns_accessible_retry_fragment(self, _mock_check):
+        request = self.factory.post(
+            "/test-view/",
+            {"cf-turnstile-response": "invalid-token"},
+            HTTP_HX_REQUEST="true",
+        )
+
+        response = self.test_view(request)
+
+        self.assertEqual(response.status_code, 400)
+        self.assertContains(response, 'role="alert"', status_code=400)

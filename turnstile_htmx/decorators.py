@@ -1,86 +1,118 @@
 import functools
+import logging
 
 import requests
 from django.conf import settings
 from django.http import HttpResponseBadRequest
+from django.utils.html import format_html
 from django.utils.safestring import mark_safe
 from django.utils.translation import gettext as _
 
+logger = logging.getLogger(__name__)
+
+SITEVERIFY_URL = "https://challenges.cloudflare.com/turnstile/v0/siteverify"
+DEFAULT_TIMEOUT_SECONDS = 5
+
 
 def get_client_ip(request):
-    """Get client IP address from request."""
-    x_forwarded_for = request.headers.get("x-forwarded-for")
-    if x_forwarded_for:
-        ip = x_forwarded_for.split(",")[0]
-    else:
-        ip = request.META.get("REMOTE_ADDR")
-    return ip
+    """Return the direct peer address without trusting client-supplied proxy headers."""
+    return request.META.get("REMOTE_ADDR")
 
 
-def check_turnstile_token(request):
-    """Validate Turnstile token with Cloudflare API."""
+def _normalise_hostnames(hostnames):
+    if not hostnames:
+        return ()
+    if isinstance(hostnames, str):
+        return (hostnames,)
+    return tuple(hostnames)
+
+
+def check_turnstile_token(request, *, action=None, hostnames=None):
+    """Validate a Turnstile token with Cloudflare's Siteverify endpoint."""
     token = request.POST.get("cf-turnstile-response")
     if not token:
         return False
 
-    remoteip = get_client_ip(request)
-    secret_key = getattr(settings, 'CLOUDFLARE_TURNSTILE_SECRET_KEY', '')
+    secret_key = getattr(settings, "CLOUDFLARE_TURNSTILE_SECRET_KEY", "")
+    if not secret_key:
+        logger.error("Turnstile validation is unavailable: secret key is not configured")
+        return False
 
-    data = {"secret": secret_key, "response": token, "remoteip": remoteip}
-    url = "https://challenges.cloudflare.com/turnstile/v0/siteverify"
+    expected_hostnames = _normalise_hostnames(
+        hostnames
+        if hostnames is not None
+        else getattr(settings, "CLOUDFLARE_TURNSTILE_EXPECTED_HOSTNAMES", ())
+    )
+    timeout = getattr(
+        settings,
+        "CLOUDFLARE_TURNSTILE_TIMEOUT_SECONDS",
+        DEFAULT_TIMEOUT_SECONDS,
+    )
+
+    data = {"secret": secret_key, "response": token}
+    remote_ip = get_client_ip(request)
+    if remote_ip:
+        data["remoteip"] = remote_ip
 
     try:
-        response = requests.post(url, data)
-        if response.ok:
-            response = response.json()
-            return response.get("success", False)
-    except Exception:
-        pass
+        response = requests.post(SITEVERIFY_URL, data=data, timeout=timeout)
+        response.raise_for_status()
+        payload = response.json()
+    except (requests.RequestException, ValueError):
+        logger.warning("Turnstile Siteverify request failed", exc_info=True)
+        return False
 
-    return False
+    if not payload.get("success", False):
+        logger.info(
+            "Turnstile rejected a token: %s",
+            payload.get("error-codes", ()),
+        )
+        return False
+
+    if action and payload.get("action") != action:
+        logger.warning("Turnstile token action did not match the protected action")
+        return False
+
+    if expected_hostnames and payload.get("hostname") not in expected_hostnames:
+        logger.warning("Turnstile token hostname was not allowed")
+        return False
+
+    return True
 
 
-def turnstile_protected(view_func=None, *, error_template=None):
-    """
-    Decorator that validates Cloudflare Turnstile CAPTCHA token.
+def turnstile_protected(
+    view_func=None,
+    *,
+    action=None,
+    hostnames=None,
+    error_template=None,
+):
+    """Require a valid Turnstile token before executing a POST view."""
 
-    Works with both regular Django views and HTMX requests.
-
-    Args:
-        view_func: The view function to decorate
-        error_template: Optional custom HTML to display on validation error
-
-    Usage:
-        @turnstile_protected
-        def my_view(request):
-            # Your view code here
-
-        # OR with custom error template
-        @turnstile_protected(error_template='<div>Custom error</div>')
-        def my_view(request):
-            # Your view code here
-    """
     def decorator(_view_func):
         @functools.wraps(_view_func)
         def _wrapped_view(request, *args, **kwargs):
-            # Only validate on POST requests
-            if request.method == "POST":
-                turnstile_valid = check_turnstile_token(request)
-                if not turnstile_valid:
-                    # For HTMX requests, return properly formatted response
-                    if request.headers.get('HX-Request'):
-                        error_html = error_template or mark_safe(
-                            '<div class="error-container">'
-                            '<h3 class="text-xl font-semibold mb-2">' + _("Verification Failed") + '</h3>'
-                            '<p class="mb-4">' + _("CAPTCHA verification failed. Please reload and try again.") + '</p>'
-                            '</div>'
-                        )
-                        return HttpResponseBadRequest(error_html)
-                    # For regular requests, return bad request with message
-                    return HttpResponseBadRequest(_("CAPTCHA verification failed. Please try again."))
+            if request.method == "POST" and not check_turnstile_token(
+                request,
+                action=action,
+                hostnames=hostnames,
+            ):
+                if request.headers.get("HX-Request"):
+                    error_html = error_template or format_html(
+                        '<div class="turnstile-error-container" role="alert">'
+                        '<strong>{}</strong><p>{}</p></div>',
+                        _("Verification failed"),
+                        _("Please complete the security check and try again."),
+                    )
+                    if error_template:
+                        error_html = mark_safe(error_template)
+                    return HttpResponseBadRequest(error_html)
+                return HttpResponseBadRequest(
+                    _("Security verification failed. Please try again.")
+                )
 
-            # Call the view function if validation passes or not required
             return _view_func(request, *args, **kwargs)
+
         return _wrapped_view
 
     if view_func:

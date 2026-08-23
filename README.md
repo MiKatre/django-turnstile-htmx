@@ -4,16 +4,22 @@ A Django app for integrating Cloudflare Turnstile CAPTCHA protection with built-
 
 ## Features
 
--   Simple integration with Django views via a decorator.
--   Transparently supports both standard form submissions and HTMX requests.
--   A single template tag (`{% turnstile_field %}`) handles all frontend logic.
--   Works with Function-Based Views (FBVs) and Class-Based Views (CBVs).
+-   Server-side Siteverify validation with bounded network requests.
+-   Optional expected action and hostname validation.
+-   Native and HTMX form submission with automatic single-use token reset.
+-   Accessible challenge errors and retries.
+-   Function-based and class-based view support.
 
 ## Installation
 
 1.  **Install the package from PyPI:**
     ```bash
-    pip install django-turnstile-htmx
+    pip install django-turnstile-htmx==0.2.0
+    ```
+
+    Or install the immutable GitHub release tag:
+    ```bash
+    pip install "django-turnstile-htmx @ git+https://github.com/MiKatre/django-turnstile-htmx.git@v0.2.0"
     ```
 
 2.  **Add the app to `INSTALLED_APPS` in your `settings.py`:**
@@ -28,6 +34,8 @@ A Django app for integrating Cloudflare Turnstile CAPTCHA protection with built-
     ```python
     CLOUDFLARE_TURNSTILE_SITE_KEY = 'your-site-key-here'
     CLOUDFLARE_TURNSTILE_SECRET_KEY = 'your-secret-key-here'
+    CLOUDFLARE_TURNSTILE_EXPECTED_HOSTNAMES = ('example.com',)
+    CLOUDFLARE_TURNSTILE_TIMEOUT_SECONDS = 5
     ```
 
 ## Usage
@@ -41,9 +49,8 @@ First, add the Turnstile script to your base template. This only needs to be don
 <html>
 <head>
     ...
-    {% turnstile_script %}
-    {# It's recommended to load htmx.org before the turnstile script if you use both #}
     <script src="https://unpkg.com/htmx.org@1.9.10"></script>
+    {% turnstile_script %}
 </head>
 <body>
     ...
@@ -64,7 +71,7 @@ Use the `{% turnstile_field %}` tag inside your form and the `@turnstile_protect
   <form method="post">
     {% csrf_token %}
     {{ form.as_p }}
-    {% turnstile_field %}
+  {% turnstile_field action="contact" %}
     <button type="submit">Send</button>
   </form>
 {% endblock %}
@@ -76,7 +83,7 @@ from django.shortcuts import render, redirect
 from turnstile_htmx.decorators import turnstile_protected
 # from .forms import ContactForm
 
-@turnstile_protected
+@turnstile_protected(action="contact")
 def contact_view(request):
     if request.method == 'POST':
         # The view code is only executed if Turnstile validation passes.
@@ -101,7 +108,7 @@ The setup is nearly identical. The `turnstile_field` template tag automatically 
     {% csrf_token %}
     <label for="email">Email:</label>
     <input type="email" name="email" id="email" required>
-    {% turnstile_field %}
+    {% turnstile_field action="subscribe" %}
     <button type="submit">Subscribe</button>
 </form>
 
@@ -113,7 +120,7 @@ The setup is nearly identical. The `turnstile_field` template tag automatically 
 from django.http import HttpResponse
 from turnstile_htmx.decorators import turnstile_protected
 
-@turnstile_protected
+@turnstile_protected(action="subscribe")
 def subscribe_view(request):
     # This view is only reached if validation succeeds.
     # The decorator handles returning a 400 Bad Request with an error
@@ -164,19 +171,22 @@ urlpatterns = [
     -   **Optional Arguments:**
         -   `container_id`: A custom `id` for the widget's `<div>` container. A unique ID is generated if not provided.
         -   `site_key`: Override the `CLOUDFLARE_TURNSTILE_SITE_KEY` from settings.
+        -   `action`: Bind the client token to the protected server action.
 
 ### Decorators
 
 -   `@turnstile_protected`
     -   A view decorator that validates the Turnstile token on `POST` requests before executing the view. It handles both standard and HTMX requests appropriately.
     -   **Optional Arguments:**
-        -   `error_template`: A string of raw HTML to be returned as the body of the `HttpResponseBadRequest` if validation fails on an HTMX request.
+        -   `action`: Require the action supplied by the widget to match.
+        -   `hostnames`: Override `CLOUDFLARE_TURNSTILE_EXPECTED_HOSTNAMES` for this view.
+        -   `error_template`: Raw HTML returned for a failed HTMX validation.
 
 ## Troubleshooting
 
 -   **Widget not appearing**: Ensure `{% turnstile_script %}` is in your base template and that `CLOUDFLARE_TURNSTILE_SITE_KEY` is set correctly in `settings.py`.
 -   **Validation always failing**: Double-check that `CLOUDFLARE_TURNSTILE_SECRET_KEY` is correct. Check your browser's developer console for any script errors.
--   **HTMX form submits twice or not at all**: Make sure you have loaded the HTMX library script *before* the `{% turnstile_script %}` tag.
+-   **A retry is rejected**: Turnstile tokens are single-use. Ensure the packaged `turnstile.js` static asset is loading so HTMX requests reset the widget after completion.
 
 ## License
 
