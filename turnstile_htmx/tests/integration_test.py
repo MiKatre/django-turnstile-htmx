@@ -78,6 +78,29 @@ class TurnstileIntegrationTests(SimpleTestCase):
         }
         self.assertFalse(check_turnstile_token(request, action="free_preview"))
 
+    @override_settings(
+        CLOUDFLARE_TURNSTILE_SECRET_KEY=(
+            "1x0000000000000000000000000000000AA"
+        ),
+        CLOUDFLARE_TURNSTILE_EXPECTED_HOSTNAMES=("localhost",),
+    )
+    @patch("turnstile_htmx.decorators.requests.post")
+    def test_official_always_pass_key_accepts_cloudflare_test_action(self, mock_post):
+        request = self.factory.post(
+            "/submit/",
+            {"cf-turnstile-response": "XXXX.DUMMY.TOKEN.XXXX"},
+            REMOTE_ADDR="127.0.0.1",
+        )
+        response = Mock()
+        response.json.return_value = {
+            "success": True,
+            "hostname": "localhost",
+            "action": "test",
+        }
+        mock_post.return_value = response
+
+        self.assertTrue(check_turnstile_token(request, action="free_preview"))
+
     @override_settings(CLOUDFLARE_TURNSTILE_SECRET_KEY="test-secret")
     @patch("turnstile_htmx.decorators.requests.post")
     def test_siteverify_fails_closed_on_cloudflare_error(self, mock_post):

@@ -12,6 +12,8 @@ logger = logging.getLogger(__name__)
 
 SITEVERIFY_URL = "https://challenges.cloudflare.com/turnstile/v0/siteverify"
 DEFAULT_TIMEOUT_SECONDS = 5
+TURNSTILE_ALWAYS_PASS_TEST_SECRET = "1x0000000000000000000000000000000AA"
+TURNSTILE_TEST_ACTION = "test"
 
 
 def get_client_ip(request):
@@ -69,7 +71,12 @@ def check_turnstile_token(request, *, action=None, hostnames=None):
         )
         return False
 
-    if action and payload.get("action") != action:
+    action_matches = payload.get("action") == action
+    test_key_matches = (
+        secret_key == TURNSTILE_ALWAYS_PASS_TEST_SECRET
+        and payload.get("action") == TURNSTILE_TEST_ACTION
+    )
+    if action and not (action_matches or test_key_matches):
         logger.warning("Turnstile token action did not match the protected action")
         return False
 
