@@ -5,7 +5,6 @@ import requests
 from django.conf import settings
 from django.http import HttpResponseBadRequest
 from django.utils.html import format_html
-from django.utils.safestring import mark_safe
 from django.utils.translation import gettext as _
 
 logger = logging.getLogger(__name__)
@@ -94,7 +93,6 @@ def turnstile_protected(
     *,
     action=None,
     hostnames=None,
-    error_template=None,
 ):
     """Require a valid Turnstile token before executing a POST view."""
 
@@ -107,15 +105,14 @@ def turnstile_protected(
                 hostnames=hostnames,
             ):
                 if request.headers.get("HX-Request"):
-                    error_html = error_template or format_html(
-                        '<div class="turnstile-error-container" role="alert">'
-                        '<strong>{}</strong><p>{}</p></div>',
-                        _("Verification failed"),
-                        _("Please complete the security check and try again."),
+                    return HttpResponseBadRequest(
+                        format_html(
+                            '<div class="turnstile-error-container" role="alert">'
+                            '<strong>{}</strong><p>{}</p></div>',
+                            _("Verification failed"),
+                            _("Please complete the security check and try again."),
+                        )
                     )
-                    if error_template:
-                        error_html = mark_safe(error_template)
-                    return HttpResponseBadRequest(error_html)
                 return HttpResponseBadRequest(
                     _("Security verification failed. Please try again.")
                 )

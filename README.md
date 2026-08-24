@@ -19,7 +19,7 @@ A Django app for integrating Cloudflare Turnstile CAPTCHA protection with built-
 
     Or install the immutable GitHub release tag:
     ```bash
-pip install "django-turnstile-htmx @ git+https://github.com/MiKatre/django-turnstile-htmx.git@v0.2.3"
+pip install "django-turnstile-htmx @ git+https://github.com/MiKatre/django-turnstile-htmx.git@v0.2.4"
     ```
 
 2.  **Add the app to `INSTALLED_APPS` in your `settings.py`:**
@@ -181,7 +181,6 @@ urlpatterns = [
     -   **Optional Arguments:**
         -   `action`: Require the action supplied by the widget to match.
         -   `hostnames`: Override `CLOUDFLARE_TURNSTILE_EXPECTED_HOSTNAMES` for this view.
-        -   `error_template`: Raw HTML returned for a failed HTMX validation.
 
 ## Troubleshooting
 
