@@ -12,14 +12,9 @@ A Django app for integrating Cloudflare Turnstile CAPTCHA protection with built-
 
 ## Installation
 
-1.  **Install the package from PyPI:**
+1.  **Install the immutable GitHub release:**
     ```bash
-    pip install django-turnstile-htmx==0.2.1
-    ```
-
-    Or install the immutable GitHub release tag:
-    ```bash
-pip install "django-turnstile-htmx @ git+https://github.com/MiKatre/django-turnstile-htmx.git@v0.2.5"
+    pip install "django-turnstile-htmx @ git+https://github.com/MiKatre/django-turnstile-htmx.git@v0.2.5"
     ```
 
 2.  **Add the app to `INSTALLED_APPS` in your `settings.py`:**
@@ -71,7 +66,7 @@ Use the `{% turnstile_field %}` tag inside your form and the `@turnstile_protect
   <form method="post">
     {% csrf_token %}
     {{ form.as_p }}
-  {% turnstile_field action="contact" %}
+    {% turnstile_field action="contact" %}
     <button type="submit">Send</button>
   </form>
 {% endblock %}

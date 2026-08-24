@@ -1,19 +1,20 @@
-# tests/test_integration.py
 from unittest.mock import Mock, patch
 
 import requests
 from django.http import HttpResponse
 from django.test import RequestFactory, SimpleTestCase, override_settings
 
-from turnstile_htmx.decorators import (SITEVERIFY_URL, check_turnstile_token,
-                                       turnstile_protected)
+from turnstile_htmx.decorators import (
+    SITEVERIFY_URL,
+    check_turnstile_token,
+    turnstile_protected,
+)
 
 
 class TurnstileIntegrationTests(SimpleTestCase):
     def setUp(self):
         self.factory = RequestFactory()
 
-        # Create test view
         @turnstile_protected
         def test_view(request):
             return HttpResponse("Success")
