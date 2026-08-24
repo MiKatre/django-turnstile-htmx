@@ -22,6 +22,7 @@ class TurnstileTemplateTagsTests(TestCase):
         self.assertIn('turnstile-widget', rendered)
         self.assertIn('test-site-key', rendered)
         self.assertIn('data-turnstile-container', rendered)
+        self.assertIn('data-appearance="always"', rendered)
         self.assertIn('role="alert"', rendered)
 
     def test_turnstile_field_with_custom_container(self):
@@ -45,6 +46,15 @@ class TurnstileTemplateTagsTests(TestCase):
         rendered = template.render(Context({}))
 
         self.assertIn('data-action="free_preview"', rendered)
+
+    def test_turnstile_field_with_custom_appearance(self):
+        template = Template(
+            "{% load turnstile_tags %}"
+            "{% turnstile_field appearance='interaction-only' %}"
+        )
+        rendered = template.render(Context({}))
+
+        self.assertIn('data-appearance="interaction-only"', rendered)
 
     def test_turnstile_field_with_custom_error_messages(self):
         template = Template(

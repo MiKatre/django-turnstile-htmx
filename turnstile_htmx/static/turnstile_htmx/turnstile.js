@@ -101,7 +101,7 @@
 
     const options = {
       sitekey: state.container.dataset.sitekey,
-      appearance: "interaction-only",
+      appearance: state.container.dataset.appearance || "always",
       execution: "execute",
       "response-field": false,
       callback(token) {

@@ -14,6 +14,7 @@ def turnstile_field(
     container_id=None,
     site_key=None,
     action=None,
+    appearance="always",
     unavailable_message=None,
     error_message=None,
     expired_message=None,
@@ -24,7 +25,7 @@ def turnstile_field(
 
     return format_html(
         '<div id="{}" class="turnstile-widget" data-turnstile-container '
-        'data-sitekey="{}" data-action="{}" '
+        'data-sitekey="{}" data-action="{}" data-appearance="{}" '
         'data-turnstile-unavailable-message="{}" '
         'data-turnstile-error-message="{}" '
         'data-turnstile-expired-message="{}" hidden></div>'
@@ -32,6 +33,7 @@ def turnstile_field(
         container_id,
         site_key,
         action or "",
+        appearance,
         unavailable_message
         or _("The security check could not be loaded. Please try again."),
         error_message or _("The security check failed. Please try again."),
